@@ -1,0 +1,5 @@
+C:\Users\tom.reilly\Documents\GitHub\HL7Load\HL7Load\HL7Load\bin\Debug\HL7Load.exe.config
+C:\Users\tom.reilly\Documents\GitHub\HL7Load\HL7Load\HL7Load\bin\Debug\HL7Load.exe
+C:\Users\tom.reilly\Documents\GitHub\HL7Load\HL7Load\HL7Load\bin\Debug\HL7Load.pdb
+C:\Users\tom.reilly\Documents\GitHub\HL7Load\HL7Load\HL7Load\obj\Debug\HL7Load.exe
+C:\Users\tom.reilly\Documents\GitHub\HL7Load\HL7Load\HL7Load\obj\Debug\HL7Load.pdb
