@@ -10,6 +10,8 @@ namespace HL7Load
     {
         public string MessageId { get; set; }
 
+        public int SequenceId { get; set; }
+
         public string ObservationId { get; set; }
 
         public string ObservationIdText { get; set; }
@@ -20,7 +22,37 @@ namespace HL7Load
 
         public string ReferenceRange { get; set; }
 
+        public DateTime EntryDate { get; set; }
+
         public int TestId { get; set; }
+
+        public int UserId { get; set; }
+
+        public string UserCN { get; set; }
+
+        public string InternalPatientId { get; set; }
+
+        public string SSN { get; set; }
+
+        public string LastName { get; set; }
+
+        public string FirstName { get; set; }
+
+        public string MiddleName { get; set; }
+
+        public string DOB { get; set; }
+
+        public string Sex { get; set; }
+
+        public string StreetAddress { get; set; }
+
+        public string OtherAddress { get; set; }
+
+        public string City { get; set; }
+
+        public string State { get; set; }
+
+        public string Zip { get; set; }
 
         public Observation()
         {
