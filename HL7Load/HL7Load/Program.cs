@@ -16,14 +16,12 @@ namespace HL7Load
             // Get a list of the observations to be processed, both new ones and previously failed ones
             List<Observation> obxList = dal.GetObservationList();
 
-            // Update observation/test link tables, as necessary, for incoming observations that we've not seen before
-            dal.UpdateTestIds(obxList);
-
             foreach (Observation obx in obxList)
             {
                 if (obx.UserId > 0)
                 {
                     string messageString = "User " + obx.UserCN + " (" + obx.FirstName + " " + obx.LastName + ") WAS found in our user database, as user (" + obx.UserId + "), and the test result was loaded.";
+                    Console.WriteLine(messageString);
                     dal.InsertNewTestResult(obx);
                     dal.UpdateProcessedObservationStatus(obx, true, messageString);
                 }

@@ -64,7 +64,7 @@ namespace HL7Load
                 obx.OtherAddress = UtilitiesDAL.ToString(reader["PIDOTHER"]);
                 obx.City = UtilitiesDAL.ToString(reader["PIDCITY"]);
                 obx.State = UtilitiesDAL.ToString(reader["PIDSTATE"]);
-                obx.Zip = UtilitiesDAL.ToString(reader["PIDZIP"]);
+                obx.Zip = UtilitiesDAL.ToString(reader["PIDZIP"]);          
                 SpecialObxSetup(obx, reader);
                 obxList.Add(obx);
             }
@@ -101,7 +101,46 @@ namespace HL7Load
             }
             reader.Close();
 
+            // Update observation/test link tables, as necessary, for incoming
+            // observations that we've not seen before (OBXes with TestID = 0)
+            UpdateTestIds(obxList);
+
             return obxList;
+        }
+
+        public void InsertNewTestResult(Observation obx)
+        {
+            SqlCommand cmd = new SqlCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Connection = SqlConnectionMain;
+
+            // Add a new test result
+            cmd.CommandText = "InsertNewTestResult";
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new SqlParameter("@UserId", obx.UserId));
+            cmd.Parameters.Add(new SqlParameter("@EntryDate", obx.EntryDate));  // Should come from the MSH segment...
+            cmd.Parameters.Add(new SqlParameter("@Test", obx.ObservationIdText));
+            cmd.Parameters.Add(new SqlParameter("@TestResult", ""));    // Do we need to compute this on test entry?
+            cmd.Parameters.Add(new SqlParameter("@TestId", obx.TestId));
+            cmd.Parameters.Add(new SqlParameter("@TestValue", obx.ResultData));
+            cmd.Parameters.Add(new SqlParameter("@NormalRange", obx.ReferenceRange));
+            cmd.ExecuteNonQuery();
+        }
+
+        public void UpdateProcessedObservationStatus(Observation obx, bool success, string message)
+        {
+            SqlCommand cmd = new SqlCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Connection = SqlConnectionHL7;
+
+            // Add a new test result
+            cmd.CommandText = "UpdateProcessedObservationStatus";
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new SqlParameter("@MessageID", obx.MessageId));
+            cmd.Parameters.Add(new SqlParameter("@SequenceID", obx.SequenceId));
+            cmd.Parameters.Add(new SqlParameter("@Success", success));
+            cmd.Parameters.Add(new SqlParameter("@Message", message));
+            cmd.ExecuteNonQuery();
         }
 
         private string GetSSN(SqlDataReader reader)
@@ -124,72 +163,6 @@ namespace HL7Load
             }
 
             return ssn;
-        }
-
-        public void UpdateTestIds(List<Observation> obxList)
-        {
-            Dictionary<string, int> obxIdDictionary = new Dictionary<string, int>();
-            foreach (Observation obx in obxList)
-            {
-                int currentTestId = obx.TestId;
-                string currentObxId = obx.ObservationId;
-                if (obxIdDictionary.Keys.Contains(currentObxId))
-                {
-                    if (currentTestId == 0)
-                    {
-                        obx.TestId = obxIdDictionary[currentObxId];
-                    }
-                }
-                else
-                {
-                    if (currentTestId == 0)
-                    {
-                        currentTestId = InsertNewTest(obx);
-                        InsertNewObxToTestMapping(obx);
-                    }
-                    obxIdDictionary[currentObxId] = currentTestId;
-                }
-            }
-        }
-
-        private int InsertNewTest(Observation obx)
-        {
-            int newTestId = 0;
-
-            SqlCommand cmd = new SqlCommand();
-            SqlDataReader reader;
-            cmd.CommandType = CommandType.StoredProcedure;
-            cmd.Connection = SqlConnectionMain;
-
-            // Create a new test for the current observation OBXID
-            cmd.CommandText = "InsertNewTest";
-            cmd.Parameters.Clear();
-            cmd.Parameters.Add(new SqlParameter("@Name", "(" + obx.ObservationId + ") " + obx.ObservationIdText));
-            cmd.Parameters.Add(new SqlParameter("@NormalRange", obx.ReferenceRange + obx.ResultUnits));
-            reader = cmd.ExecuteReader();
-            if (reader.Read())
-            {
-                newTestId = Convert.ToInt32(reader.GetValue(0));
-                obx.TestId = newTestId;
-            }
-
-            reader.Close();
-
-            return newTestId;
-        }
-
-        private void InsertNewObxToTestMapping(Observation obx)
-        {
-            SqlCommand cmd = new SqlCommand();
-            cmd.CommandType = CommandType.StoredProcedure;
-            cmd.Connection = SqlConnectionHL7;
-
-            // Create a new mapping from the current observation's ObxId to the appropriate TestId
-            cmd.CommandText = "InsertNewObxToTestMapping";
-            cmd.Parameters.Clear();
-            cmd.Parameters.Add(new SqlParameter("@ObservationId", obx.ObservationId));
-            cmd.Parameters.Add(new SqlParameter("@TestId", obx.TestId));
-            cmd.ExecuteNonQuery();
         }
 
         private void SpecialObxSetup(Observation obx, SqlDataReader reader)
@@ -264,6 +237,72 @@ namespace HL7Load
             }
         }
 
+        private void UpdateTestIds(List<Observation> obxList)
+        {
+            Dictionary<string, int> obxIdDictionary = new Dictionary<string, int>();
+            foreach (Observation obx in obxList)
+            {
+                int currentTestId = obx.TestId;
+                string currentObxId = obx.ObservationId;
+                if (obxIdDictionary.Keys.Contains(currentObxId))
+                {
+                    if (currentTestId == 0)
+                    {
+                        obx.TestId = obxIdDictionary[currentObxId];
+                    }
+                }
+                else
+                {
+                    if (currentTestId == 0)
+                    {
+                        currentTestId = InsertNewTest(obx);
+                        InsertNewObxToTestMapping(obx);
+                    }
+                    obxIdDictionary[currentObxId] = currentTestId;
+                }
+            }
+        }
+
+        private int InsertNewTest(Observation obx)
+        {
+            int newTestId = 0;
+
+            SqlCommand cmd = new SqlCommand();
+            SqlDataReader reader;
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Connection = SqlConnectionMain;
+
+            // Create a new test for the current observation OBXID
+            cmd.CommandText = "InsertNewTest";
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new SqlParameter("@Name", "(" + obx.ObservationId + ") " + obx.ObservationIdText));
+            cmd.Parameters.Add(new SqlParameter("@NormalRange", obx.ReferenceRange + obx.ResultUnits));
+            reader = cmd.ExecuteReader();
+            if (reader.Read())
+            {
+                newTestId = Convert.ToInt32(reader.GetValue(0));
+                obx.TestId = newTestId;
+            }
+
+            reader.Close();
+
+            return newTestId;
+        }
+
+        private void InsertNewObxToTestMapping(Observation obx)
+        {
+            SqlCommand cmd = new SqlCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Connection = SqlConnectionHL7;
+
+            // Create a new mapping from the current observation's ObxId to the appropriate TestId
+            cmd.CommandText = "InsertNewObxToTestMapping";
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new SqlParameter("@ObservationId", obx.ObservationId));
+            cmd.Parameters.Add(new SqlParameter("@TestId", obx.TestId));
+            cmd.ExecuteNonQuery();
+        }
+
         private bool MatchOnSexAndDOB(Observation obx, string censusSex, DateTime censusDOB)
         {
             DateTime obxDOB;
@@ -278,41 +317,6 @@ namespace HL7Load
                 }
             }
             return false;
-        }
-
-        public void InsertNewTestResult(Observation obx)
-        {
-            SqlCommand cmd = new SqlCommand();
-            cmd.CommandType = CommandType.StoredProcedure;
-            cmd.Connection = SqlConnectionMain;
-
-            // Add a new test result
-            cmd.CommandText = "InsertNewTestResult";
-            cmd.Parameters.Clear();
-            cmd.Parameters.Add(new SqlParameter("@UserId", obx.UserId));
-            cmd.Parameters.Add(new SqlParameter("@EntryDate", obx.EntryDate));  // Should come from the MSH segment...
-            cmd.Parameters.Add(new SqlParameter("@Test", obx.ObservationIdText));
-            cmd.Parameters.Add(new SqlParameter("@TestResult", ""));    // Do we need to compute this on test entry?
-            cmd.Parameters.Add(new SqlParameter("@TestId", obx.TestId));
-            cmd.Parameters.Add(new SqlParameter("@TestValue", obx.ResultData));
-            cmd.Parameters.Add(new SqlParameter("@NormalRange", obx.ReferenceRange));
-            cmd.ExecuteNonQuery();
-        }
-
-        public void UpdateProcessedObservationStatus(Observation obx, bool success, string message)
-        {
-            SqlCommand cmd = new SqlCommand();
-            cmd.CommandType = CommandType.StoredProcedure;
-            cmd.Connection = SqlConnectionHL7;
-
-            // Add a new test result
-            cmd.CommandText = "UpdateProcessedObservationStatus";
-            cmd.Parameters.Clear();
-            cmd.Parameters.Add(new SqlParameter("@MessageID", obx.MessageId));
-            cmd.Parameters.Add(new SqlParameter("@SequenceID", obx.SequenceId));
-            cmd.Parameters.Add(new SqlParameter("@Success", success));
-            cmd.Parameters.Add(new SqlParameter("@Message", message));
-            cmd.ExecuteNonQuery();
         }
     }
 }
