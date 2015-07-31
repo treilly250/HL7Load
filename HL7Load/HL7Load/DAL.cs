@@ -14,6 +14,7 @@ namespace HL7Load
         private static Logger Logger = null;
         private static SqlConnection SqlConnectionHL7 = null;
         private static SqlConnection SqlConnectionMain = null;
+        private static bool FindUsersBySSN = true;
 
         private Dictionary<string, int> UserCNCache = new Dictionary<string, int>();
         private Dictionary<string, int> SSNCache = new Dictionary<string, int>();
@@ -33,6 +34,8 @@ namespace HL7Load
 
             SqlConnectionHL7.Open();
             SqlConnectionMain.Open();
+
+            FindUsersBySSN = settings.FindUsersBySSN;
         }
 
         public List<Observation> GetObservationList()
@@ -211,8 +214,14 @@ namespace HL7Load
             }
             obx.EntryDate = messageDateTime;
 
-            //GetUserIdBasedOnUserCN(obx);
-            GetUserIdBasedOnSSN(obx);
+            if (FindUsersBySSN)
+            {
+                GetUserIdBasedOnSSN(obx);
+            }
+            else
+            {
+                GetUserIdBasedOnUserCN(obx);
+            }
         }
 
         private void GetUserIdBasedOnUserCN(Observation obx)

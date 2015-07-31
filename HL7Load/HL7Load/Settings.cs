@@ -23,15 +23,18 @@ namespace HL7Load
             if (ConfigurationManager.ConnectionStrings["SqlConnectionHL7"] != null)
             {
                 SqlConnectionHL7String = ConfigurationManager.ConnectionStrings["SqlConnectionHL7"].ToString();
+                logger.LogLine("HL7 database connection string: " + SqlConnectionHL7String);
             }
             if (ConfigurationManager.ConnectionStrings["SqlConnectionMain"] != null)
             {
                 SqlConnectionMainString = ConfigurationManager.ConnectionStrings["SqlConnectionMain"].ToString();
+                logger.LogLine("Main database connection string: " + SqlConnectionMainString);
             }
             if (ConfigurationManager.AppSettings["FindUsersBySSN"] != null)
             {
                 FindUsersBySSNString = ConfigurationManager.AppSettings["FindUsersBySSN"].ToString();
                 bool.TryParse(FindUsersBySSNString, out FindUsersBySSN);
+                logger.LogLine("Finding users based on: " + (FindUsersBySSN ? "SSN" : "UserCN"));
             }
         }
     }
