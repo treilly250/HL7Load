@@ -10,27 +10,42 @@ namespace HL7Load
     {
         static void Main(string[] args)
         {
-            DAL dal = new DAL(ConfigurationManager.ConnectionStrings["SqlConnectionHL7"].ToString(),
-                              ConfigurationManager.ConnectionStrings["SqlConnectionMain"].ToString());
-
-            // Get a list of the observations to be processed, both new ones and previously failed ones
-            List<Observation> obxList = dal.GetObservationList();
-
-            foreach (Observation obx in obxList)
+            Logger Logger = new Logger();
+            try
             {
-                if (obx.UserId > 0)
+                Settings Settings = new Settings(Logger);
+                DAL dal = new DAL(Settings);
+
+                // Get a list of the observations to be processed, both new ones and previously failed ones
+                List<Observation> obxList = dal.GetObservationList();
+
+                foreach (Observation obx in obxList)
                 {
-                    string messageString = "User " + obx.UserCN + " (" + obx.FirstName + " " + obx.LastName + ") WAS found in our user database, as user (" + obx.UserId + "), and the test result was loaded.";
-                    Console.WriteLine(messageString);
-                    dal.InsertNewTestResult(obx);
-                    dal.UpdateProcessedObservationStatus(obx, true, messageString);
+                    if (obx.UserId > 0)
+                    {
+                        string messageString = "User " + obx.UserCN + " (" + obx.FirstName + " " + obx.LastName + ") WAS found in our user database, as user (" + obx.UserId + "), and the test result was loaded.";
+                        Logger.LogLine(messageString);
+                        dal.InsertNewTestResult(obx);
+                        dal.UpdateProcessedObservationStatus(obx, true, messageString);
+                    }
+                    else
+                    {
+                        string messageString = "User " + obx.UserCN + " (" + obx.FirstName + " " + obx.LastName + ") was not found in our user database.";
+                        Logger.LogLine(messageString);
+                        dal.UpdateProcessedObservationStatus(obx, false, messageString);
+                    }
                 }
-                else
+            }
+            catch (Exception ex)
+            {
+                Logger.LogLine("Terminated with an exception, as follows:");
+                Logger.LogLine(ex.Message);
+                if (ex.InnerException != null)
                 {
-                    string messageString = "User " + obx.UserCN + " (" + obx.FirstName + " " + obx.LastName + ") was not found in our user database.";
-                    Console.WriteLine(messageString);
-                    dal.UpdateProcessedObservationStatus(obx, false, messageString);
+                    Logger.LogLine("Inner exception:");
+                    Logger.LogLine(ex.InnerException.Message);
                 }
+                Logger.Close();
             }
         }
     }

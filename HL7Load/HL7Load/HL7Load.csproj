@@ -42,6 +42,8 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Settings.cs" />
+    <Compile Include="Logger.cs" />
     <Compile Include="DAL.cs" />
     <Compile Include="UtilitiesDAL.cs" />
     <Compile Include="Observation.cs" />
