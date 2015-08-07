@@ -42,11 +42,13 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Settings.cs" />
+    <Compile Include="BLL\BLL.cs" />
+    <Compile Include="Data\PatientIdentification.cs" />
+    <Compile Include="Data\Settings.cs" />
     <Compile Include="Logger.cs" />
-    <Compile Include="DAL.cs" />
-    <Compile Include="UtilitiesDAL.cs" />
-    <Compile Include="Observation.cs" />
+    <Compile Include="DAL\DAL.cs" />
+    <Compile Include="DAL\UtilitiesDAL.cs" />
+    <Compile Include="Data\Observation.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

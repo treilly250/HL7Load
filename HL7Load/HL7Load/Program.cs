@@ -14,27 +14,31 @@ namespace HL7Load
             try
             {
                 Settings Settings = new Settings(Logger);
-                DAL dal = new DAL(Settings);
+                BLL BLL = new BLL(Settings);
 
                 // Get a list of the observations to be processed, both new ones and previously failed ones
-                List<Observation> obxList = dal.GetObservationList();
+                List<Observation> obxList = BLL.GetObservationList();
 
+                // Process each observation based on whether everything matched up (user and observation type)
                 foreach (Observation obx in obxList)
                 {
                     if (obx.UserId > 0)
                     {
-                        string messageString = "User " + obx.UserCN + " (" + obx.FirstName + " " + obx.LastName + ") WAS found in our user database, as user (" + obx.UserId + "), and the test result was loaded.";
-                        Logger.LogLine(messageString);
-                        dal.InsertNewTestResult(obx);
-                        dal.UpdateProcessedObservationStatus(obx, true, messageString);
+                        if (obx.TestId > 0)
+                        {
+                            BLL.ProcessFullMatch(obx);
+                        }
+                        else
+                        {
+                            BLL.ProcessObservationMismatch(obx);
+                        }
                     }
                     else
                     {
-                        string messageString = "User " + obx.UserCN + " (" + obx.FirstName + " " + obx.LastName + ") was not found in our user database.";
-                        Logger.LogLine(messageString);
-                        dal.UpdateProcessedObservationStatus(obx, false, messageString);
+                        BLL.ProcessNameMismatch(obx);
                     }
                 }
+                BLL.UpdateUserScores();
             }
             catch (Exception ex)
             {

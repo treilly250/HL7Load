@@ -42,7 +42,7 @@ namespace HL7Load
 
         public string DOB { get; set; }
 
-        public string Sex { get; set; }
+        public string Gender { get; set; }
 
         public string StreetAddress { get; set; }
 
