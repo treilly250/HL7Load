@@ -27,14 +27,26 @@ namespace HL7Load
 
         public List<Observation> GetObservationList()
         {
-            List<PatientIdentification> patientIdList = DAL.GetAutoMatchMappings();
+            // Get all mappings - explicit ones for specific mismatches,
+            // as well as those that have been marked for automatic reuse
+            List<AutoMatch> autoMatchList = DAL.GetAutoMatchMappings();
+            List<ExplicitMatch> explicitMatchList = DAL.GetExplicitMatchMappings();
 
+            // Get all unprocessed and failed observations from the HL7 database
             List<Observation> observationList = DAL.GetObservationList();
+
+            // Apply explicit and automatic mappings as needed
             foreach(Observation obx in observationList)
             {
+                if (obx.UserId == 0 || obx.TestId == 0)
+                {
+                    // Attempt resolution via explicit mappings
+                    GetExplicitMatchMappedUserIdAndTestId(obx, explicitMatchList);
+                }
                 if (obx.UserId == 0)
                 {
-                    GetAutoMatchMappedUserId(obx, patientIdList);
+                    // If not mapped explicitly, try our automatic mappings
+                    GetAutoMatchMappedUserId(obx, autoMatchList);
                 }
             }
 
@@ -77,7 +89,7 @@ namespace HL7Load
             }
         }
 
-        private void GetAutoMatchMappedUserId(Observation obx, List<PatientIdentification> patientIdList)
+        private void GetAutoMatchMappedUserId(Observation obx, List<AutoMatch> autoMatchList)
         {
             string obxLastName = obx.LastName.ToLower();
             string obxFirstName = obx.FirstName.ToLower();
@@ -86,29 +98,46 @@ namespace HL7Load
             DateTime obxDOB = ImplausibleDateTime;  // A perfectly implausible date of birth...
             DateTime.TryParseExact(obx.DOB, DAL.DateFormats, new CultureInfo("en-US"), DateTimeStyles.None, out obxDOB);
 
-            foreach (PatientIdentification patientId in patientIdList)
+            foreach (AutoMatch autoMatch in autoMatchList)
             {
-                string patientIdSSN = patientId.SSN;
-                string patientIdLastName = patientId.LastName.ToLower();
-                string patientIdFirstName = patientId.FirstName.ToLower();
-                string patientIdGender = patientId.Gender.ToLower();
+                string autoMatchSSN = autoMatch.SSN;
+                string autoMatchLastName = autoMatch.LastName.ToLower();
+                string autoMatchFirstName = autoMatch.FirstName.ToLower();
+                string autoMatchGender = autoMatch.Gender.ToLower();
 
-                if (obxSSN == patientIdSSN
+                if (obxSSN == autoMatchSSN
                     &&
-                    obxLastName == patientIdLastName
+                    obxLastName == autoMatchLastName
                     &&
-                    obxFirstName == patientIdFirstName
+                    obxFirstName == autoMatchFirstName
                     &&
-                    obxGender == patientIdGender)
+                    obxGender == autoMatchGender)
                 {
-                    DateTime patientIdDOB = ImplausibleDateTime;  // A perfectly implausible date of birth...
-                    DateTime.TryParseExact(patientId.DOB, DAL.DateFormats, new CultureInfo("en-US"), DateTimeStyles.None, out patientIdDOB);
-                    if (obxDOB.Date == patientIdDOB.Date)
+                    if (obxDOB.Date == autoMatch.DOB.Date)
                     {
-                        obx.UserId = patientId.MatchedToUserId;
+                        obx.UserId = autoMatch.MatchedToUserId;
+                        return;
                     }
                 }
-                return;
+            }
+        }
+
+        private void GetExplicitMatchMappedUserIdAndTestId(Observation obx, List<ExplicitMatch> explicitMatchList)
+        {
+            foreach (ExplicitMatch explicitMatch in explicitMatchList)
+            {
+                if (obx.DataLoadMismatchTestID == explicitMatch.DataLoadMismatchTestId)
+                {
+                    if (obx.UserId == 0)
+                    {
+                        obx.UserId = explicitMatch.MatchedToUserId;
+                    }
+                    if (obx.TestId == 0)
+                    {
+                        obx.TestId = explicitMatch.MatchedToTestId;
+                    }
+                    return;
+                }
             }
         }
     }

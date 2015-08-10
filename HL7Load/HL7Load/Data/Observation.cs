@@ -54,6 +54,8 @@ namespace HL7Load
 
         public string Zip { get; set; }
 
+        public int DataLoadMismatchTestID { get; set; }
+
         public Observation()
         {
         }

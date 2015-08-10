@@ -43,7 +43,8 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="BLL\BLL.cs" />
-    <Compile Include="Data\PatientIdentification.cs" />
+    <Compile Include="Data\ExplicitMatch.cs" />
+    <Compile Include="Data\AutoMatch.cs" />
     <Compile Include="Data\Settings.cs" />
     <Compile Include="Logger.cs" />
     <Compile Include="DAL\DAL.cs" />

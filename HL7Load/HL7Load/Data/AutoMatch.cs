@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace HL7Load
 {
-    class PatientIdentification
+    class AutoMatch
     {
         public string LastName { get; set; }
 
@@ -14,13 +14,13 @@ namespace HL7Load
 
         public string Gender { get; set; }
 
-        public string DOB { get; set; }
+        public DateTime DOB { get; set; }
 
         public string SSN { get; set; }
 
         public int MatchedToUserId { get; set; }
 
-        public PatientIdentification()
+        public AutoMatch()
         {
         }
     }

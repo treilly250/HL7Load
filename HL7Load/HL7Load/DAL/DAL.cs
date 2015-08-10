@@ -72,7 +72,8 @@ namespace HL7Load
                 obx.OtherAddress = UtilitiesDAL.ToString(reader["PIDOTHER"]);
                 obx.City = UtilitiesDAL.ToString(reader["PIDCITY"]);
                 obx.State = UtilitiesDAL.ToString(reader["PIDSTATE"]);
-                obx.Zip = UtilitiesDAL.ToString(reader["PIDZIP"]);          
+                obx.Zip = UtilitiesDAL.ToString(reader["PIDZIP"]);
+                obx.DataLoadMismatchTestID = UtilitiesDAL.ToInt(reader["DataLoadMismatchTestID"]);
                 SpecialObxSetup(obx, reader);
                 obxList.Add(obx);
             }
@@ -104,6 +105,7 @@ namespace HL7Load
                 obx.City = UtilitiesDAL.ToString(reader["PIDCITY"]);
                 obx.State = UtilitiesDAL.ToString(reader["PIDSTATE"]);
                 obx.Zip = UtilitiesDAL.ToString(reader["PIDZIP"]);
+                obx.DataLoadMismatchTestID = 0;
                 SpecialObxSetup(obx, reader);
                 obxList.Add(obx);
             }
@@ -112,9 +114,9 @@ namespace HL7Load
             return obxList;
         }
 
-        public List<PatientIdentification> GetAutoMatchMappings()
+        public List<AutoMatch> GetAutoMatchMappings()
         {
-            List<PatientIdentification> patientIdList = new List<PatientIdentification>();
+            List<AutoMatch> autoMatchList = new List<AutoMatch>();
 
             SqlCommand cmd = new SqlCommand();
             SqlDataReader reader;
@@ -126,18 +128,43 @@ namespace HL7Load
             reader = cmd.ExecuteReader();
             while (reader.Read())
             {
-                PatientIdentification patientId = new PatientIdentification();
-                patientId.LastName = UtilitiesDAL.ToString(reader["LastName"]);
-                patientId.FirstName = UtilitiesDAL.ToString(reader["FirstName"]);
-                patientId.Gender = UtilitiesDAL.ToString(reader["Gender"]);
-                patientId.DOB = UtilitiesDAL.ToString(reader["DateOfBirth"]);
-                patientId.SSN = UtilitiesDAL.ToString(reader["SSN"]);
-                patientId.MatchedToUserId = UtilitiesDAL.ToInt(reader["MatchedToUserID"]);
-                patientIdList.Add(patientId);
+                AutoMatch autoMatch = new AutoMatch();
+                autoMatch.LastName = UtilitiesDAL.ToString(reader["LastName"]);
+                autoMatch.FirstName = UtilitiesDAL.ToString(reader["FirstName"]);
+                autoMatch.Gender = UtilitiesDAL.ToString(reader["Gender"]);
+                autoMatch.DOB = UtilitiesDAL.ToDateTime(reader["DateOfBirth"]);
+                autoMatch.SSN = UtilitiesDAL.ToString(reader["SSN"]);
+                autoMatch.MatchedToUserId = UtilitiesDAL.ToInt(reader["MatchedToUserID"]);
+                autoMatchList.Add(autoMatch);
             }
             reader.Close();
 
-            return patientIdList;
+            return autoMatchList;
+        }
+
+        public List<ExplicitMatch> GetExplicitMatchMappings()
+        {
+            List<ExplicitMatch> explicitMatchList = new List<ExplicitMatch>();
+
+            SqlCommand cmd = new SqlCommand();
+            SqlDataReader reader;
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Connection = SqlConnectionMain;
+
+            // Get previously defined patient ID mappings
+            cmd.CommandText = "GetExplicitMatchMappings";
+            reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                ExplicitMatch explicitMatch = new ExplicitMatch();
+                explicitMatch.DataLoadMismatchTestId = UtilitiesDAL.ToInt(reader["DataLoadMismatchTestID"]);
+                explicitMatch.MatchedToUserId = UtilitiesDAL.ToInt(reader["MatchedToUserID"]);
+                explicitMatch.MatchedToTestId = UtilitiesDAL.ToInt(reader["MatchedToTestID"]);
+                explicitMatchList.Add(explicitMatch);
+            }
+            reader.Close();
+
+            return explicitMatchList;
         }
 
         public void InsertNewTestResult(Observation obx)
@@ -178,6 +205,19 @@ namespace HL7Load
             cmd.Parameters.Add(new SqlParameter("@Success", success));
             cmd.Parameters.Add(new SqlParameter("@Message", message));
             cmd.Parameters.Add(new SqlParameter("@DataLoadMismatchTestID", success ? (object)DBNull.Value : RecordMismatchForLaterResolution(obx)));
+            cmd.ExecuteNonQuery();
+        }
+
+        public void UpdateUserScores(int userId)
+        {
+            SqlCommand cmd = new SqlCommand();
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Connection = SqlConnectionMain;
+
+            // Update this user's scores
+            cmd.CommandText = "UpdateUserScores";
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new SqlParameter("@UserId", userId));
             cmd.ExecuteNonQuery();
         }
 
@@ -445,19 +485,6 @@ namespace HL7Load
             reader.Close();
 
             return newDataLoadMismatchTestId;
-        }
-
-        public void UpdateUserScores(int userId)
-        {
-            SqlCommand cmd = new SqlCommand();
-            cmd.CommandType = CommandType.StoredProcedure;
-            cmd.Connection = SqlConnectionMain;
-
-            // Update this user's scores
-            cmd.CommandText = "UpdateUserScores";
-            cmd.Parameters.Clear();
-            cmd.Parameters.Add(new SqlParameter("@UserId", userId));
-            cmd.ExecuteNonQuery();
         }
     }
 }
