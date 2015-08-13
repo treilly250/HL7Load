@@ -32,7 +32,7 @@ namespace HL7Load
             List<AutoMatch> autoMatchList = DAL.GetAutoMatchMappings();
             List<ExplicitMatch> explicitMatchList = DAL.GetExplicitMatchMappings();
 
-            // Get all unprocessed and failed observations from the HL7 database
+            // Get all unprocessed and failed observations from the HL7 database tables
             List<Observation> observationList = DAL.GetObservationList();
 
             // Apply explicit and automatic mappings as needed

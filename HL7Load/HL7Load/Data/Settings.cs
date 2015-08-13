@@ -12,7 +12,6 @@ namespace HL7Load
     class Settings
     {
         public Logger Logger = null;
-        public string SqlConnectionHL7String = null;
         public string SqlConnectionMainString = null;
         public bool FindUsersBySSN = true;
         private string FindUsersBySSNString = null;
@@ -20,11 +19,6 @@ namespace HL7Load
         public Settings(Logger logger)
         {
             Logger = logger;
-            if (ConfigurationManager.ConnectionStrings["SqlConnectionHL7"] != null)
-            {
-                SqlConnectionHL7String = ConfigurationManager.ConnectionStrings["SqlConnectionHL7"].ToString();
-                logger.LogLine("HL7 database connection string: " + SqlConnectionHL7String);
-            }
             if (ConfigurationManager.ConnectionStrings["SqlConnectionMain"] != null)
             {
                 SqlConnectionMainString = ConfigurationManager.ConnectionStrings["SqlConnectionMain"].ToString();

@@ -12,6 +12,8 @@ namespace HL7Load
 
         public int SequenceId { get; set; }
 
+        public string CustomerId { get; set; }
+
         public string ObservationId { get; set; }
 
         public string ObservationIdText { get; set; }
