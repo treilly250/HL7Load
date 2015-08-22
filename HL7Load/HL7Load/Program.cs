@@ -26,7 +26,14 @@ namespace HL7Load
                     {
                         if (obx.TestId > 0)
                         {
-                            BLL.ProcessFullMatch(obx);
+                            if (BLL.TestValueIsValid(obx))
+                            {
+                                BLL.ProcessFullMatchAndGoodValue(obx);
+                            }
+                            else
+                            {
+                                BLL.ProcessInvalidTestValue(obx);
+                            }
                         }
                         else
                         {

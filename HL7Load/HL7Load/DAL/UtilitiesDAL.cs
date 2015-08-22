@@ -5,6 +5,14 @@ namespace HL7Load
 {
     public class UtilitiesDAL
     {
+        public static string ToNullableString(object datum)
+        {
+            if (datum is DBNull)
+                return null;
+            else
+                return Convert.ToString(datum);
+        }
+
         public static int? ToNullableInt(object datum)
         {
             if (datum is DBNull)
@@ -52,7 +60,10 @@ namespace HL7Load
 
         public static int ToInt(object datum)
         {
-            return Convert.ToInt32(datum);
+            if (datum is DBNull)
+                return 0;
+            else
+                return Convert.ToInt32(datum);
         }
 
         public static bool ToBoolean(object datum)

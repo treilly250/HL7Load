@@ -53,32 +53,50 @@ namespace HL7Load
             return observationList;
         }
 
-        public void ProcessFullMatch(Observation obx)
+        public void ProcessFullMatchAndGoodValue(Observation obx)
         {
             string messageString = "User " + obx.UserCN + " (" + obx.FirstName + " " + obx.LastName + ") WAS found in our user database, as user (" + obx.UserId + "), and the test result was loaded.";
             Logger.LogLine(messageString);
             DAL.InsertNewTestResult(obx);
-            DAL.UpdateProcessedObservationStatus(obx, true, messageString);
+            DAL.UpdateProcessedObservationStatus(obx, true, messageString, null, null);
 
             // Add user ID to the user ID list, if not already in it
             if (!UserIdList.Contains(obx.UserId))
             {
                 UserIdList.Add(obx.UserId);
             }
+
+            // If a replacement value was used, mark the DataLoadValueError entry as resolved
+            if (obx.DataLoadValueErrorID > 0 &&
+                obx.ReplacementValue != null &&
+                obx.ResultData == obx.ReplacementValue)
+            {
+                DAL.ResolveDataLoadValueError(obx.DataLoadValueErrorID);
+            }
+        }
+
+        public void ProcessInvalidTestValue(Observation obx)
+        {
+            string messageString = "User " + obx.UserCN + " (" + obx.FirstName + " " + obx.LastName + ") found as user (" + obx.UserId + "), BUT the test result was NOT loaded, because it appears to be invalid based on the USHC test normal ranges (" + obx.TestId + ": " + obx.TestNormalRange + ", " + obx.TestNormalRangeFemale + ").";
+            Logger.LogLine(messageString);
+            int valueErrorId = RecordValueErrorForLaterResolution(obx);
+            DAL.UpdateProcessedObservationStatus(obx, false, messageString, null, valueErrorId);
         }
 
         public void ProcessNameMismatch(Observation obx)
         {
             string messageString = "User " + obx.UserCN + " (" + obx.FirstName + " " + obx.LastName + ") was NOT found in our user database.";
             Logger.LogLine(messageString);
-            DAL.UpdateProcessedObservationStatus(obx, false, messageString);
+            int mismatchTestId = RecordMismatchForLaterResolution(obx);
+            DAL.UpdateProcessedObservationStatus(obx, false, messageString, mismatchTestId, null);
         }
 
         public void ProcessObservationMismatch(Observation obx)
         {
             string messageString = "User " + obx.UserCN + " (" + obx.FirstName + " " + obx.LastName + ") found as user (" + obx.UserId + "), BUT the test result was NOT loaded, because there was no USHC test corresponding to observation (" + obx.ObservationId + ").";
             Logger.LogLine(messageString);
-            DAL.UpdateProcessedObservationStatus(obx, false, messageString);
+            int mismatchTestId = RecordMismatchForLaterResolution(obx);
+            DAL.UpdateProcessedObservationStatus(obx, false, messageString, mismatchTestId, null);
         }
 
         public void UpdateUserScores()
@@ -87,6 +105,47 @@ namespace HL7Load
             {
                 DAL.UpdateUserScores(userId);
             }
+        }
+
+        public bool TestValueIsValid(Observation obx)
+        {
+            if (ContainsAtLeastOneDigit(obx.TestNormalRange) ||
+                ContainsAtLeastOneDigit(obx.TestNormalRangeFemale))
+            {
+                decimal decimalResultData = 0;
+                if (!decimal.TryParse(obx.ResultData, out decimalResultData))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        private bool ContainsAtLeastOneDigit(string inputString)
+        {
+            foreach(char inputChar in inputString.ToCharArray())
+            {
+                if (char.IsDigit(inputChar))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private int RecordMismatchForLaterResolution(Observation obx)
+        {
+            int mismatchId = DAL.GetExistingDataLoadMismatch(obx);
+            if (mismatchId == 0)
+            {
+                mismatchId = DAL.InsertDataLoadMismatch(obx);
+            }
+            return DAL.InsertDataLoadMismatchTest(obx, mismatchId);
+        }
+
+        private int RecordValueErrorForLaterResolution(Observation obx)
+        {
+            return DAL.InsertDataLoadValueError(obx);
         }
 
         private void GetAutoMatchMappedUserId(Observation obx, List<AutoMatch> autoMatchList)

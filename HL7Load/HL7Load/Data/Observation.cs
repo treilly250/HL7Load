@@ -28,6 +28,10 @@ namespace HL7Load
 
         public int TestId { get; set; }
 
+        public string TestNormalRange { get; set; }
+
+        public string TestNormalRangeFemale { get; set; }
+
         public int UserId { get; set; }
 
         public string UserCN { get; set; }
@@ -57,6 +61,10 @@ namespace HL7Load
         public string Zip { get; set; }
 
         public int DataLoadMismatchTestID { get; set; }
+
+        public int DataLoadValueErrorID { get; set; }
+
+        public string ReplacementValue { get; set; }
 
         public Observation()
         {

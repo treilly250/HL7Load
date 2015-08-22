@@ -58,6 +58,8 @@ namespace HL7Load
                 obx.ResultUnits = UtilitiesDAL.ToString(reader["OBXUNITS"]);
                 obx.ReferenceRange = UtilitiesDAL.ToString(reader["OBXREFRANGE"]);
                 obx.TestId = UtilitiesDAL.ToInt(reader["TestID"]);
+                obx.TestNormalRange = UtilitiesDAL.ToString(reader["NormalRange"]);
+                obx.TestNormalRangeFemale = UtilitiesDAL.ToString(reader["NormalRangeF"]);
                 obx.InternalPatientId = UtilitiesDAL.ToString(reader["PIDINTERNALPATIENTID"]);
                 obx.SSN = GetSSN(reader);
                 obx.LastName = UtilitiesDAL.ToString(reader["PIDLASTNAME"]);
@@ -71,6 +73,8 @@ namespace HL7Load
                 obx.State = UtilitiesDAL.ToString(reader["PIDSTATE"]);
                 obx.Zip = UtilitiesDAL.ToString(reader["PIDZIP"]);
                 obx.DataLoadMismatchTestID = UtilitiesDAL.ToInt(reader["DataLoadMismatchTestID"]);
+                obx.DataLoadValueErrorID = UtilitiesDAL.ToInt(reader["DataLoadValueErrorID"]);
+                obx.ReplacementValue = UtilitiesDAL.ToNullableString(reader["ReplacementValue"]);
                 SpecialObxSetup(obx, reader);
                 obxList.Add(obx);
             }
@@ -91,6 +95,8 @@ namespace HL7Load
                 obx.ResultUnits = UtilitiesDAL.ToString(reader["OBXUNITS"]);
                 obx.ReferenceRange = UtilitiesDAL.ToString(reader["OBXREFRANGE"]);
                 obx.TestId = UtilitiesDAL.ToInt(reader["TestID"]);
+                obx.TestNormalRange = UtilitiesDAL.ToString(reader["NormalRange"]);
+                obx.TestNormalRangeFemale = UtilitiesDAL.ToString(reader["NormalRangeF"]);
                 obx.InternalPatientId = UtilitiesDAL.ToString(reader["PIDINTERNALPATIENTID"]);
                 obx.SSN = GetSSN(reader);
                 obx.LastName = UtilitiesDAL.ToString(reader["PIDLASTNAME"]);
@@ -104,19 +110,13 @@ namespace HL7Load
                 obx.State = UtilitiesDAL.ToString(reader["PIDSTATE"]);
                 obx.Zip = UtilitiesDAL.ToString(reader["PIDZIP"]);
                 obx.DataLoadMismatchTestID = 0;
+                obx.DataLoadValueErrorID = 0;
                 SpecialObxSetup(obx, reader);
                 obxList.Add(obx);
             }
             reader.Close();
 
-            if (FindUsersBySSN)
-            {
-                GetUserIdBasedOnSSN(obxList);
-            }
-            else
-            {
-                GetUserIdBasedOnUserCN(obxList);
-            }
+            FillInUserIdFields(obxList);
 
             return obxList;
         }
@@ -198,7 +198,7 @@ namespace HL7Load
             cmd.ExecuteNonQuery();
         }
 
-        public void UpdateProcessedObservationStatus(Observation obx, bool success, string message)
+        public void UpdateProcessedObservationStatus(Observation obx, bool success, string message, int? mismatchForLaterResolution, int? valueErrorId)
         {
             SqlCommand cmd = new SqlCommand();
             cmd.CommandType = CommandType.StoredProcedure;
@@ -211,7 +211,8 @@ namespace HL7Load
             cmd.Parameters.Add(new SqlParameter("@SequenceID", obx.SequenceId));
             cmd.Parameters.Add(new SqlParameter("@Success", success));
             cmd.Parameters.Add(new SqlParameter("@Message", message));
-            cmd.Parameters.Add(new SqlParameter("@DataLoadMismatchTestID", success ? (object)DBNull.Value : RecordMismatchForLaterResolution(obx)));
+            cmd.Parameters.Add(new SqlParameter("@DataLoadMismatchTestID", (success || !mismatchForLaterResolution.HasValue) ? (object)DBNull.Value : mismatchForLaterResolution.Value));
+            cmd.Parameters.Add(new SqlParameter("@DataLoadValueErrorID", valueErrorId.HasValue ? valueErrorId.Value : (object)DBNull.Value));
             cmd.ExecuteNonQuery();
         }
 
@@ -298,9 +299,31 @@ namespace HL7Load
             {
                 obx.ResultData = obx.ResultData.Substring(0, firstComponentSeparatorPosition);
             }
+
+            // Use the replacement value, if given
+            if (obx.DataLoadValueErrorID > 0 &&
+                obx.ReplacementValue != null)
+            {
+                obx.ResultData = obx.ReplacementValue;
+            }
         }
 
-        private void GetUserIdBasedOnUserCN(List<Observation> obxList)
+        private void FillInUserIdFields(List<Observation> obxList)
+        {
+            foreach(Observation obx in obxList)
+            {
+                if (GetUserIdBySSN(obx.CustomerId))
+                {
+                    GetUserIdBasedOnSSN(obx);
+                }
+                else
+                {
+                    GetUserIdBasedOnUserCN(obx);
+                }
+            }
+        }
+
+        private void GetUserIdBasedOnUserCN(Observation obx)
         {
             int censusUserId = 0;
             string censusGender = "";
@@ -314,40 +337,37 @@ namespace HL7Load
             // Get the matching UserId for the UserCN in the current observation
             cmd.CommandText = "GetUserIdBasedOnUserCN";
 
-            foreach (Observation obx in obxList)
+            if (UserCNCache.Keys.Contains(obx.UserCN))
             {
-                if (UserCNCache.Keys.Contains(obx.UserCN))
+                Logger.LogLine("Found " + obx.UserCN + " in the cache");
+                obx.UserId = UserCNCache[obx.UserCN];
+            }
+            else
+            {
+                cmd.Parameters.Clear();
+                cmd.Parameters.Add(new SqlParameter("@UserCN", obx.UserCN));
+                reader = cmd.ExecuteReader();
+                if (reader.Read())
                 {
-                    Logger.LogLine("Found " + obx.UserCN + " in the cache");
-                    obx.UserId = UserCNCache[obx.UserCN];
+                    censusUserId = UtilitiesDAL.ToInt(reader["UserID"]);
+                    censusGender = UtilitiesDAL.ToString(reader["Gender"]);
+                    censusDOB = UtilitiesDAL.ToDateTime(reader["DOB"]);
                 }
-                else
+                obx.UserId = censusUserId;
+                UserCNCache[obx.UserCN] = censusUserId;
+                Logger.LogLine("Added " + obx.UserCN + " to the cache");
+                if (censusUserId > 0
+                    &&
+                    !MatchOnGenderAndDOB(obx, censusGender, censusDOB))
                 {
-                    cmd.Parameters.Clear();
-                    cmd.Parameters.Add(new SqlParameter("@UserCN", obx.UserCN));
-                    reader = cmd.ExecuteReader();
-                    if (reader.Read())
-                    {
-                        censusUserId = UtilitiesDAL.ToInt(reader["UserID"]);
-                        censusGender = UtilitiesDAL.ToString(reader["Gender"]);
-                        censusDOB = UtilitiesDAL.ToDateTime(reader["DOB"]);
-                    }
-                    obx.UserId = censusUserId;
-                    UserCNCache[obx.UserCN] = censusUserId;
-                    Logger.LogLine("Added " + obx.UserCN + " to the cache");
-                    if (censusUserId > 0
-                        &&
-                        !MatchOnGenderAndDOB(obx, censusGender, censusDOB))
-                    {
-                        obx.UserId = 0;  // Treat as if user was not found, due to gender/DOB mismatch
-                    }
+                    obx.UserId = 0;  // Treat as if user was not found, due to gender/DOB mismatch
+                }
 
-                    reader.Close();
-                }
+                reader.Close();
             }
         }
 
-        private void GetUserIdBasedOnSSN(List<Observation> obxList)
+        private void GetUserIdBasedOnSSN(Observation obx)
         {
             int censusUserId = 0;
             string censusGender = "";
@@ -361,49 +381,52 @@ namespace HL7Load
             // Get the matching UserId for the SSN in the current observation
             cmd.CommandText = "GetUserIdBasedOnSSN";
 
-            foreach (Observation obx in obxList)
+            if (obx.SSN.Length < 9)
             {
-                if (obx.SSN.Length < 9)
+                Logger.LogLine("SSN (" + obx.SSN + ") is not long enough");
+                obx.UserId = 0;
+            }
+            else if (SSNCache.Keys.Contains(obx.SSN))
+            {
+                Logger.LogLine("Found " + obx.SSN + " in the cache");
+                obx.UserId = SSNCache[obx.SSN];
+            }
+            else
+            {
+                try
                 {
-                    Logger.LogLine("SSN (" + obx.SSN + ") is not long enough");
-                    obx.UserId = 0;
-                }
-                else if (SSNCache.Keys.Contains(obx.SSN))
-                {
-                    Logger.LogLine("Found " + obx.SSN + " in the cache");
-                    obx.UserId = SSNCache[obx.SSN];
-                }
-                else
-                {
-                    try
+                    cmd.Parameters.Clear();
+                    cmd.Parameters.Add(new SqlParameter("@SSN", obx.SSN));
+                    reader = cmd.ExecuteReader();
+                    if (reader.Read())
                     {
-                        cmd.Parameters.Clear();
-                        cmd.Parameters.Add(new SqlParameter("@SSN", obx.SSN));
-                        reader = cmd.ExecuteReader();
-                        if (reader.Read())
-                        {
-                            censusUserId = UtilitiesDAL.ToInt(reader["UserID"]);
-                            censusGender = UtilitiesDAL.ToString(reader["Gender"]);
-                            censusDOB = UtilitiesDAL.ToDateTime(reader["DOB"]);
-                        }
-                        obx.UserId = censusUserId;
-                        SSNCache[obx.SSN] = censusUserId;
-                        Logger.LogLine("Added " + obx.SSN + " to the cache");
-                        if (censusUserId > 0
-                            &&
-                            !MatchOnGenderAndDOB(obx, censusGender, censusDOB))
-                        {
-                            obx.UserId = 0;  // Treat as if user was not found, due to gender/DOB mismatch
-                        }
+                        censusUserId = UtilitiesDAL.ToInt(reader["UserID"]);
+                        censusGender = UtilitiesDAL.ToString(reader["Gender"]);
+                        censusDOB = UtilitiesDAL.ToDateTime(reader["DOB"]);
+                    }
+                    obx.UserId = censusUserId;
+                    SSNCache[obx.SSN] = censusUserId;
+                    Logger.LogLine("Added " + obx.SSN + " to the cache");
+                    if (censusUserId > 0
+                        &&
+                        !MatchOnGenderAndDOB(obx, censusGender, censusDOB))
+                    {
+                        obx.UserId = 0;  // Treat as if user was not found, due to gender/DOB mismatch
+                    }
 
-                        reader.Close();
-                    }
-                    catch(Exception ex)
-                    {
-                        Logger.LogLine("Unexpected error when trying to process " + obx.SSN);
-                    }
+                    reader.Close();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogLine("Unexpected error when trying to process " + obx.SSN + " (" + ex.Message + ")");
                 }
             }
+        }
+
+        private bool GetUserIdBySSN(string customerId)
+        {
+            // Determine the right way to get the user ID, based on customer ID string
+            return true;
         }
 
         private bool MatchOnGenderAndDOB(Observation obx, string censusGender, DateTime censusDOB)
@@ -422,17 +445,7 @@ namespace HL7Load
             return false;
         }
 
-        private int RecordMismatchForLaterResolution(Observation obx)
-        {
-            int mismatchId = GetExistingDataLoadMismatch(obx);
-            if (mismatchId == 0)
-            {
-                mismatchId = InsertDataLoadMismatch(obx);
-            }
-            return InsertDataLoadMismatchTest(obx, mismatchId);
-        }
-
-        private int GetExistingDataLoadMismatch(Observation obx)
+        public int GetExistingDataLoadMismatch(Observation obx)
         {
             int existingDataLoadMismatchId = 0;
 
@@ -459,7 +472,7 @@ namespace HL7Load
             return existingDataLoadMismatchId;
         }
 
-        private int InsertDataLoadMismatch(Observation obx)
+        public int InsertDataLoadMismatch(Observation obx)
         {
             int newDataLoadMismatchId = 0;
 
@@ -476,6 +489,7 @@ namespace HL7Load
             cmd.Parameters.Add(new SqlParameter("@DateOfBirth", obx.DOB));
             cmd.Parameters.Add(new SqlParameter("@SSN", obx.SSN));
             cmd.Parameters.Add(new SqlParameter("@MatchedToUserID", (obx.UserId == 0) ? (object)DBNull.Value : obx.UserId));
+            cmd.Parameters.Add(new SqlParameter("@CustomerID", (obx.CustomerId == "DM") ? 1 : 2));
             reader = cmd.ExecuteReader();
             if (reader.Read())
             {
@@ -487,7 +501,7 @@ namespace HL7Load
             return newDataLoadMismatchId;
         }
 
-        private int InsertDataLoadMismatchTest(Observation obx, int dataLoadMismatchId)
+        public int InsertDataLoadMismatchTest(Observation obx, int dataLoadMismatchId)
         {
             int newDataLoadMismatchTestId = 0;
 
@@ -511,6 +525,48 @@ namespace HL7Load
             reader.Close();
 
             return newDataLoadMismatchTestId;
+        }
+
+        public int InsertDataLoadValueError(Observation obx)
+        {
+            int newDataLoadValueErrorId = 0;
+
+            SqlCommand cmd = new SqlCommand();
+            SqlDataReader reader;
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Connection = SqlConnectionMain;
+
+            cmd.CommandText = "InsertDataLoadValueError";
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new SqlParameter("@SuppliedValue", obx.ResultData));
+            cmd.Parameters.Add(new SqlParameter("@ReferenceRange", obx.ReferenceRange));
+            cmd.Parameters.Add(new SqlParameter("@TestID", obx.TestId));
+            cmd.Parameters.Add(new SqlParameter("@TestNormalRange", obx.TestNormalRange));
+            cmd.Parameters.Add(new SqlParameter("@TestNormalRangeFemale", obx.TestNormalRangeFemale));
+            reader = cmd.ExecuteReader();
+            if (reader.Read())
+            {
+                newDataLoadValueErrorId = Convert.ToInt32(reader.GetValue(0));
+            }
+
+            reader.Close();
+
+            return newDataLoadValueErrorId;
+        }
+
+        public void ResolveDataLoadValueError(int resolvedDataLoadValueErrorId)
+        {
+            SqlCommand cmd = new SqlCommand();
+            SqlDataReader reader;
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Connection = SqlConnectionMain;
+
+            cmd.CommandText = "ResolveDataLoadValueError";
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new SqlParameter("@DataLoadValueErrorId", resolvedDataLoadValueErrorId));
+            reader = cmd.ExecuteReader();
+
+            reader.Close();
         }
     }
 }
