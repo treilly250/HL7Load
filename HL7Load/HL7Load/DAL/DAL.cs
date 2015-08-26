@@ -51,7 +51,7 @@ namespace HL7Load
                 Observation obx = new Observation();
                 obx.MessageId = UtilitiesDAL.ToString(reader["MessageID"]);
                 obx.SequenceId = UtilitiesDAL.ToInt(reader["SequenceID"]);
-                obx.CustomerId = UtilitiesDAL.ToString(reader["CustomerID"]);
+                obx.CustomerString = UtilitiesDAL.ToString(reader["CustomerString"]);
                 obx.ObservationId = UtilitiesDAL.ToString(reader["OBXID"]);
                 obx.ObservationIdText = UtilitiesDAL.ToString(reader["OBXIDTEXT"]);
                 obx.ResultData = UtilitiesDAL.ToString(reader["OBXRESULT"]);
@@ -88,7 +88,7 @@ namespace HL7Load
                 Observation obx = new Observation();
                 obx.MessageId = UtilitiesDAL.ToString(reader["MessageID"]);
                 obx.SequenceId = UtilitiesDAL.ToInt(reader["SequenceID"]);
-                obx.CustomerId = UtilitiesDAL.ToString(reader["CustomerID"]);
+                obx.CustomerString = UtilitiesDAL.ToString(reader["CustomerString"]);
                 obx.ObservationId = UtilitiesDAL.ToString(reader["OBXID"]);
                 obx.ObservationIdText = UtilitiesDAL.ToString(reader["OBXIDTEXT"]);
                 obx.ResultData = UtilitiesDAL.ToString(reader["OBXRESULT"]);
@@ -140,7 +140,7 @@ namespace HL7Load
                 autoMatch.FirstName = UtilitiesDAL.ToString(reader["FirstName"]);
                 autoMatch.Gender = UtilitiesDAL.ToString(reader["Gender"]);
                 autoMatch.DOB = UtilitiesDAL.ToDateTime(reader["DateOfBirth"]);
-                autoMatch.SSN = UtilitiesDAL.ToString(reader["SSN"]);
+                autoMatch.SSN = UtilitiesDAL.ToString(reader["SSN"]).Replace("-", "");
                 autoMatch.MatchedToUserId = UtilitiesDAL.ToInt(reader["MatchedToUserID"]);
                 autoMatchList.Add(autoMatch);
             }
@@ -262,10 +262,9 @@ namespace HL7Load
                         ssn = selectedComponent.Substring(tildeOffset + 1);
                     }
                 }
-                ssn = ssn.Replace("-", "");
             }
 
-            return ssn;
+            return ssn.Replace("-", "");
         }
 
         private void SpecialObxSetup(Observation obx, SqlDataReader reader)
@@ -312,7 +311,7 @@ namespace HL7Load
         {
             foreach(Observation obx in obxList)
             {
-                if (GetUserIdBySSN(obx.CustomerId))
+                if (GetUserIdBySSN(obx.CustomerString))
                 {
                     GetUserIdBasedOnSSN(obx);
                 }
@@ -423,9 +422,9 @@ namespace HL7Load
             }
         }
 
-        private bool GetUserIdBySSN(string customerId)
+        private bool GetUserIdBySSN(string customerString)
         {
-            // Determine the right way to get the user ID, based on customer ID string
+            // Determine the right way to get the user ID, based on customer token string
             return true;
         }
 
@@ -489,7 +488,7 @@ namespace HL7Load
             cmd.Parameters.Add(new SqlParameter("@DateOfBirth", obx.DOB));
             cmd.Parameters.Add(new SqlParameter("@SSN", obx.SSN));
             cmd.Parameters.Add(new SqlParameter("@MatchedToUserID", (obx.UserId == 0) ? (object)DBNull.Value : obx.UserId));
-            cmd.Parameters.Add(new SqlParameter("@CustomerID", (obx.CustomerId == "DM") ? 1 : 2));
+            cmd.Parameters.Add(new SqlParameter("@CustomerString", obx.CustomerString));
             reader = cmd.ExecuteReader();
             if (reader.Read())
             {
@@ -525,6 +524,36 @@ namespace HL7Load
             reader.Close();
 
             return newDataLoadMismatchTestId;
+        }
+
+        public void InsertUnmappedObservation(Observation obx)
+        {
+            SqlCommand cmd = new SqlCommand();
+            SqlDataReader reader;
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Connection = SqlConnectionMain;
+
+            cmd.CommandText = "InsertUnmappedObservation";
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new SqlParameter("@OBXID", obx.ObservationId));
+            reader = cmd.ExecuteReader();
+
+            reader.Close();
+        }
+
+        public void InsertUnmappedCustomer(Observation obx)
+        {
+            SqlCommand cmd = new SqlCommand();
+            SqlDataReader reader;
+            cmd.CommandType = CommandType.StoredProcedure;
+            cmd.Connection = SqlConnectionMain;
+
+            cmd.CommandText = "InsertUnmappedCustomer";
+            cmd.Parameters.Clear();
+            cmd.Parameters.Add(new SqlParameter("@CustomerString", obx.CustomerString));
+            reader = cmd.ExecuteReader();
+
+            reader.Close();
         }
 
         public int InsertDataLoadValueError(Observation obx)

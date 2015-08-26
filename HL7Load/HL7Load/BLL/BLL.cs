@@ -140,6 +140,10 @@ namespace HL7Load
             {
                 mismatchId = DAL.InsertDataLoadMismatch(obx);
             }
+            if (obx.TestId == 0)
+            {
+                DAL.InsertUnmappedObservation(obx);
+            }
             return DAL.InsertDataLoadMismatchTest(obx, mismatchId);
         }
 
